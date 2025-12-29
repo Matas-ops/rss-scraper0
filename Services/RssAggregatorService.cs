@@ -51,9 +51,9 @@ public class RssAggregatorService
                 var items = await ReadTopicItemsMetaAsync(topic); // Only metadata, no scraping
                 allItems.AddRange(items);
             }
-            catch
+            catch(Exception ex)
             {
-                continue;
+                Console.Error.WriteLine(ex.Message);
             }
         }
         
