@@ -1,5 +1,5 @@
 ## Docker
 
-docker build -t bnsnewsrss .
+docker build -t newsrss .
 
-docker run --rm -p 8080:8080 bnsnewsrss
+docker run --rm -p 8080:8080 newsrss
