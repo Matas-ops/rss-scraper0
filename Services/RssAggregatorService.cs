@@ -224,9 +224,9 @@ public class RssAggregatorService
  xmlns:media=""http://search.yahoo.com/mrss/"">");
 
         sb.AppendLine("<channel>");
-        sb.AppendLine("<title>BNS Spaudos Centro pranešimai</title>");
+        sb.AppendLine("<title>pranešimai</title>");
         sb.AppendLine("<link>https://sc.bns.lt</link>");
-        sb.AppendLine("<description>Automatiškai agreguoti pranešimai</description>");
+        sb.AppendLine("<description>pranešimai</description>");
         sb.AppendLine($"<lastBuildDate>{DateTime.UtcNow:R}</lastBuildDate>");
         sb.AppendLine("<language>lt</language>");
         sb.AppendLine(@"<atom:link href=""https://yourdomain.lt/feed"" rel=""self"" type=""application/rss+xml"" />");
