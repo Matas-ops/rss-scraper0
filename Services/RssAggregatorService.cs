@@ -16,7 +16,7 @@ public class RssAggregatorService
     private readonly ArticleScraperService _scraper;
 
     private const string MainFeed = "https://sc.bns.lt/rss";
-    private const int MaxItems = 20;
+    private const int MaxItems = 40;
 
     public RssAggregatorService(IHttpClientFactory http, IMemoryCache cache, ArticleScraperService scraper)
     {
