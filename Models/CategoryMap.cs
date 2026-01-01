@@ -2,7 +2,7 @@ namespace BnsNewsRss.Models;
 
 public class CategoryMap
 {
-    public Dictionary<string[], string> Bns = new()
+    public static readonly Dictionary<string[], string> Bns = new()
     {
         //compared as starts with
         //from -> to
