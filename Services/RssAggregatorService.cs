@@ -106,7 +106,7 @@ public class RssAggregatorService
             {
                 scrapedItems.Add(item with
                 {
-                    Content = $"{scraped.Content} <p><a href=\"{item.Link}\">Originalaus straipsnio nuoroda</a></p>",
+                    Content = scraped.Content,
                     FeaturedImage = scraped.FeaturedImage ?? GetFeaturedImageFromDescription(item.Description)
                 });
             }
