@@ -6,6 +6,7 @@ using System.Xml.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using BnsNewsRss.Models;
 using BnsNewsRss.Keys;
+using BnsNewsRss.Mappers;
 
 namespace BnsNewsRss.Services;
 
@@ -16,7 +17,7 @@ public class RssAggregatorService
     private readonly ArticleScraperService _scraper;
 
     private const string MainFeed = "https://sc.bns.lt/rss";
-    private const int MaxItems = 40;
+    private const int MaxItems = 10;
 
     public RssAggregatorService(IHttpClientFactory http, IMemoryCache cache, ArticleScraperService scraper)
     {
@@ -32,6 +33,7 @@ public class RssAggregatorService
 
         var xml = await BuildWordPressFeedAsync();
         _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(4));
+        
         return xml;
     }
     
@@ -44,9 +46,11 @@ public class RssAggregatorService
         {
             try
             {
-                //don't read topic that aggregates all others
-                if (topic.Title.Contains("Visi pranešimai"))
+                //don't read these topics
+                if (topic.Title.Contains("Visi pranešimai") || topic.Title.Contains("RAIT apklausos") || topic.Title.Contains("Teisinė sistema") || topic.Title.Contains("Nacionalinis saugumas") || topic.Title.Contains("Spaudos konferencijos") || topic.Title.Contains("Viešoji komunikacija") || topic.Title.Contains("Jaunimas"))
+                {
                     continue;
+                }
                 
                 var items = await ReadTopicItemsMetaAsync(topic); // Only metadata, no scraping
                 allItems.AddRange(items);
@@ -58,6 +62,7 @@ public class RssAggregatorService
         }
         
         //clusterfuck
+        //TODO optimize by custom category selection priority list if this will be needed
         
         var deduped = allItems
             .GroupBy(i => i.Guid)
@@ -160,7 +165,7 @@ public class RssAggregatorService
                 Description: description.Trim(),
                 PubDate: pubDate == default ? DateTime.UtcNow : pubDate,
                 Guid: guid,
-                Category: topic.Title,
+                Category: CategoryMapper.MapBnsTopicToCategory(topic.Title),
                 Content: "",
                 FeaturedImage: null
             ));
@@ -202,6 +207,7 @@ public class RssAggregatorService
     private static string SanitizeXml(string xml)
     {
         if (string.IsNullOrWhiteSpace(xml)) return "";
+        
         return xml.Replace("&nbsp;", " ").Replace("&laquo;", "«").Replace("&raquo;", "»");
     }
 
@@ -209,6 +215,7 @@ public class RssAggregatorService
     {
         var client = _http.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(15);
+        
         return await client.GetStringAsync(url);
     }
 
@@ -238,7 +245,11 @@ public class RssAggregatorService
             sb.AppendLine($"<link>{item.Link}</link>");
             sb.AppendLine($"<guid isPermaLink=\"false\">{item.Guid}</guid>");
             sb.AppendLine($"<pubDate>{item.PubDate:R}</pubDate>");
-            sb.AppendLine($"<category><![CDATA[{item.Category}]]></category>");
+            foreach (var category in item.Category.Split(", "))
+            {
+                sb.AppendLine($"<category><![CDATA[{category}]]></category>");
+            }
+            //sb.AppendLine($"<category><![CDATA[{item.Category}]]></category>");
             sb.AppendLine($"<description><![CDATA[{item.Description}]]></description>");
             sb.AppendLine($"<content:encoded><![CDATA[{item.Content}]]></content:encoded>");
             if (!string.IsNullOrEmpty(item.FeaturedImage))
