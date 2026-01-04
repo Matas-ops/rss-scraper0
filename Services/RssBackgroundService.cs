@@ -26,7 +26,7 @@ public class RssBackgroundService : BackgroundService
             try
             {
                 var xml = await _aggregator.BuildWordPressFeedAsync();
-                _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(4));
+                _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(8));
                 _state.LastRefreshUtc = DateTime.UtcNow;
             }
             catch(Exception ex)
@@ -34,7 +34,7 @@ public class RssBackgroundService : BackgroundService
                 Console.Error.WriteLine($"Error while building WordPress feed from RSS Feed: {ex.Message}");
             }
 
-            await Task.Delay(TimeSpan.FromHours(4), stoppingToken);
+            await Task.Delay(TimeSpan.FromHours(8), stoppingToken);
         }
     }
 }

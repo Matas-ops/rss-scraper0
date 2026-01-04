@@ -32,7 +32,7 @@ public class RssAggregatorService
             return cached;
 
         var xml = await BuildWordPressFeedAsync();
-        _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(4));
+        _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(8));
         
         return xml;
     }
@@ -253,7 +253,12 @@ public class RssAggregatorService
             sb.AppendLine($"<description><![CDATA[{item.Description}]]></description>");
             sb.AppendLine($"<content:encoded><![CDATA[{item.Content}]]></content:encoded>");
             if (!string.IsNullOrEmpty(item.FeaturedImage))
-                sb.AppendLine($@"<media:content url=""{item.FeaturedImage}"" medium=""image"" />");
+            {
+                string type = item.FeaturedImage.Split(".")[^1].ToLower();
+                if (type == "jpg") type = "jpeg";
+                
+                sb.AppendLine($@"<enclosure url=""{item.FeaturedImage}"" length=""0"" medium=""image/{type}"" />");
+            }
             sb.AppendLine("</item>");
         }
 
