@@ -24,7 +24,7 @@ public class Program
 
         app.MapGet("/health", (IMemoryCache cache, RssHealthState state) =>
         {
-            var cached = cache.TryGetValue(CacheKeys.WordPressFeed, out _);
+            var cached = cache.TryGetValue($"{CacheKeys.WordPressFeed}_Aktualijos", out _);
             return Results.Json(new
             {
                 status = HttpStatusCode.OK,

@@ -22,11 +22,6 @@ public class CategoryMapper
     
     public static readonly List<string> AllCategories = BnsMap.Values.ToList();
     
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="bnsTopic"></param>
-    /// <returns>Categories used aggregated into string, separated by commas</returns>
     public static List<string> MapBnsTopicToCategory(string bnsTopic)
     {
         List<string> mappedCategories = [];
