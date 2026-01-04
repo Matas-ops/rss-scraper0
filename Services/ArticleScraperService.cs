@@ -40,6 +40,7 @@ public class ArticleScraperService
             if (diff.TotalMilliseconds < 500)
                 await Task.Delay(500 - (int)diff.TotalMilliseconds);
 
+            //sorry
             var client = _http.CreateClient();
             client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("abc", "1.0"));
             var html = await client.GetStringAsync(url);
