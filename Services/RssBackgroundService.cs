@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Caching.Memory;
 using BnsNewsRss.Keys;
+using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
 using BnsNewsRss.Services;
 
@@ -25,8 +26,13 @@ public class RssBackgroundService : BackgroundService
         {
             try
             {
-                var xml = await _aggregator.BuildWordPressFeedAsync();
-                _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(8));
+                foreach (var category in CategoryMapper.AllCategories)
+                {
+                    var xml = await _aggregator.BuildWordPressFeedAsync(category);
+                    
+                    _cache.Set($"{CacheKeys.WordPressFeed}_{category}", xml, TimeSpan.FromHours(8));
+                }
+                
                 _state.LastRefreshUtc = DateTime.UtcNow;
             }
             catch(Exception ex)

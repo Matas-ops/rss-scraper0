@@ -26,18 +26,18 @@ public class RssAggregatorService
         _scraper = scraper;
     }
 
-    public async Task<string> GetCachedWordPressFeedAsync()
+    public async Task<string> GetCachedWordPressFeedAsync(string topicName)
     {
-        if (_cache.TryGetValue(CacheKeys.WordPressFeed, out string cached))
+        if (_cache.TryGetValue($"{CacheKeys.WordPressFeed}_{topicName}", out string cached))
             return cached;
 
-        var xml = await BuildWordPressFeedAsync();
-        _cache.Set(CacheKeys.WordPressFeed, xml, TimeSpan.FromHours(8));
+        var xml = await BuildWordPressFeedAsync(topicName);
+        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(8));
         
         return xml;
     }
     
-    public async Task<string> BuildWordPressFeedAsync()
+    public async Task<string> BuildWordPressFeedAsync(string topicName)
     {
         var topics = await ReadTopicsAsync();
         var allItems = new List<FeedItem>();
@@ -67,39 +67,41 @@ public class RssAggregatorService
         var deduped = allItems
             .GroupBy(i => i.Guid)
             .Select(g => g.First())
+            .OrderByDescending(i => i.PubDate)
+            .Take(MaxItems)
             .ToList();
 
-        var groupedByCategory = deduped
-            .GroupBy(i => i.Category)
-            .Select(g => g
-                .OrderByDescending(i => i.PubDate)
-                .ToList())
-            .ToList();
+         var groupedByCategory = deduped
+             .GroupBy(i => i.BnsCategory)
+             .Select(g => g
+                 .OrderByDescending(i => i.PubDate)
+                 .ToList())
+             .ToList();
 
         var finalItems = new List<FeedItem>();
-        int index = 0;
-
-        while (finalItems.Count < MaxItems)
-        {
-            bool addedAny = false;
-
-            foreach (var categoryItems in groupedByCategory)
-            {
-                if (index < categoryItems.Count)
-                {
-                    finalItems.Add(categoryItems[index]);
-                    addedAny = true;
-
-                    if (finalItems.Count == MaxItems)
-                        break;
-                }
-            }
-
-            if (!addedAny)
-                break; // no more items in any category
-
-            index++;
-        }
+         int index = 0;
+        
+         while (finalItems.Count < MaxItems)
+         {
+             bool addedAny = false;
+        
+             foreach (var categoryItems in groupedByCategory)
+             {
+                 if (index < categoryItems.Count)
+                 {
+                     finalItems.Add(categoryItems[index]);
+                     addedAny = true;
+        
+                     if (finalItems.Count == MaxItems)
+                         break;
+                 }
+             }
+        
+             if (!addedAny)
+                 break; // no more items in any category
+        
+             index++;
+         }
     
         // Now scrape only the selected items
         var scrapedItems = new List<FeedItem>();
@@ -119,7 +121,7 @@ public class RssAggregatorService
         
         scrapedItems.Sort( (a, b) => b.PubDate.CompareTo(a.PubDate) );
     
-        return BuildWordPressXml(scrapedItems);
+        return BuildWordPressXml(scrapedItems, topicName);
     }
     
     /*
@@ -165,7 +167,8 @@ public class RssAggregatorService
                 Description: description.Trim(),
                 PubDate: pubDate == default ? DateTime.UtcNow : pubDate,
                 Guid: guid,
-                Category: CategoryMapper.MapBnsTopicToCategory(topic.Title),
+                BnsCategory: topic.Title,
+                MappedCategories: CategoryMapper.MapBnsTopicToCategory(topic.Title),
                 Content: "",
                 FeaturedImage: null
             ));
@@ -219,7 +222,7 @@ public class RssAggregatorService
         return await client.GetStringAsync(url);
     }
 
-    private static string BuildWordPressXml(List<FeedItem> items)
+    private static string BuildWordPressXml(List<FeedItem> items, string topicName)
     {
         var sb = new StringBuilder();
 
@@ -231,21 +234,21 @@ public class RssAggregatorService
  xmlns:media=""http://search.yahoo.com/mrss/"">");
 
         sb.AppendLine("<channel>");
-        sb.AppendLine("<title>pranešimai</title>");
+        sb.AppendLine($"<title>{topicName}</title>");
         sb.AppendLine("<link>https://sc.bns.lt</link>");
-        sb.AppendLine("<description>pranešimai</description>");
+        sb.AppendLine($"<description>{topicName}</description>");
         sb.AppendLine($"<lastBuildDate>{DateTime.UtcNow:R}</lastBuildDate>");
         sb.AppendLine("<language>lt</language>");
         sb.AppendLine(@"<atom:link href=""https://yourdomain.lt/feed"" rel=""self"" type=""application/rss+xml"" />");
 
-        foreach (var item in items)
+        foreach (var item in items.Where(i => i.MappedCategories.Contains(topicName)))
         {
             sb.AppendLine("<item>");
             sb.AppendLine($"<title><![CDATA[{item.Title}]]></title>");
             sb.AppendLine($"<link>{item.Link}</link>");
             sb.AppendLine($"<guid isPermaLink=\"false\">{item.Guid}</guid>");
             sb.AppendLine($"<pubDate>{item.PubDate:R}</pubDate>");
-            foreach (var category in item.Category.Split(", "))
+            foreach (var category in item.MappedCategories)
             {
                 sb.AppendLine($"<category><![CDATA[{category}]]></category>");
             }

@@ -20,12 +20,14 @@ public class CategoryMapper
         {["Transportas"], "Transportas" },
     };
     
+    public static readonly List<string> AllCategories = BnsMap.Values.ToList();
+    
     /// <summary>
     /// 
     /// </summary>
     /// <param name="bnsTopic"></param>
     /// <returns>Categories used aggregated into string, separated by commas</returns>
-    public static string MapBnsTopicToCategory(string bnsTopic)
+    public static List<string> MapBnsTopicToCategory(string bnsTopic)
     {
         List<string> mappedCategories = [];
         
@@ -41,7 +43,7 @@ public class CategoryMapper
         {
             Console.Error.WriteLine($"{bnsTopic} not mapped to any category");
         }
-        
-        return string.Join(", ", mappedCategories);
+
+        return mappedCategories;
     }
 }

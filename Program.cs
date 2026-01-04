@@ -1,5 +1,6 @@
 using System.Net;
 using BnsNewsRss.Keys;
+using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
 using BnsNewsRss.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -33,11 +34,15 @@ public class Program
             });
         });
 
-        app.MapGet("/", async (RssAggregatorService rss) =>
+        foreach (var category in CategoryMapper.AllCategories)
         {
-            var xml = await rss.GetCachedWordPressFeedAsync();
-            return Results.Text(xml, "application/rss+xml", System.Text.Encoding.UTF8);
-        });
+            app.MapGet($"/{category.ToLower()}", async (RssAggregatorService rss) =>
+            {
+                var xml = await rss.GetCachedWordPressFeedAsync(category);
+                
+                return Results.Text(xml, "application/rss+xml", System.Text.Encoding.UTF8);
+            });
+        }
 
         app.Run();
     }
