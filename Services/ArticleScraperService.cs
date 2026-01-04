@@ -172,24 +172,26 @@ public class ArticleScraperService
         if (string.IsNullOrWhiteSpace(href))
             return;
 
-        // Basic safety: only allow http(s)
-        if (!href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-            !href.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        var isHttp =
+            href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+        var isMailto =
+            href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
+
+        // Allow only http(s) and mailto
+        if (!isHttp && !isMailto)
             return;
 
         sb.Append("<a href=\"");
         sb.Append(WebUtility.HtmlEncode(href));
         sb.Append("\"");
 
-        // Preserve target if present
         var target = node.GetAttributeValue("target", null);
         if (!string.IsNullOrWhiteSpace(target))
             sb.Append($" target=\"{target}\"");
 
-        // Always enforce rel for security
-        sb.Append(" rel=\"noopener noreferrer\"");
-
-        sb.Append(">");
+        sb.Append(" rel=\"noopener noreferrer\">");
 
         foreach (var c in node.ChildNodes)
             AppendInlineNode(c, sb);
@@ -247,8 +249,7 @@ public class ArticleScraperService
         doc.LoadHtml(html);
 
         // Remove script & style safely
-        foreach (var node in doc.DocumentNode.SelectNodes("//script|//style") 
-                             ?? Enumerable.Empty<HtmlNode>())
+        foreach (var node in doc.DocumentNode.SelectNodes("//script|//style") ?? Enumerable.Empty<HtmlNode>())
         {
             node.Remove();
         }
