@@ -32,7 +32,7 @@ public class RssAggregatorService
             return cached;
 
         var xml = await BuildWordPressFeedAsync(topicName);
-        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(8));
+        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(12));
         
         return xml;
     }
