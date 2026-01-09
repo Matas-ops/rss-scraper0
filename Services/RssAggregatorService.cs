@@ -255,7 +255,7 @@ public class RssAggregatorService
             //sb.AppendLine($"<category><![CDATA[{item.Category}]]></category>");
             sb.AppendLine($"<description><![CDATA[{item.Description}]]></description>");
             sb.AppendLine($"<content:encoded><![CDATA[{item.Content}]]></content:encoded>");
-            if (!string.IsNullOrEmpty(item.FeaturedImage))
+            if (!string.IsNullOrEmpty(item.FeaturedImage) && !item.FeaturedImage.Contains("https://sc.bns.lt/img/logo.png"))
             {
                 string type = item.FeaturedImage.Split(".")[^1].ToLower();
                 if (type == "jpg") type = "jpeg";
