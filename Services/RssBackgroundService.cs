@@ -1,3 +1,4 @@
+using BnsNewsRss.Constants;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Caching.Memory;
 using BnsNewsRss.Keys;
@@ -30,7 +31,7 @@ public class RssBackgroundService : BackgroundService
                 {
                     var xml = await _aggregator.BuildWordPressFeedAsync(category);
                     
-                    _cache.Set($"{CacheKeys.WordPressFeed}_{category}", xml, TimeSpan.FromHours(12));
+                    _cache.Set($"{CacheKeys.WordPressFeed}_{category}", xml, TimeSpan.FromHours(Configuration.FetchInterval));
                 }
                 
                 _state.LastRefreshUtc = DateTime.UtcNow;
@@ -40,7 +41,7 @@ public class RssBackgroundService : BackgroundService
                 Console.Error.WriteLine($"Error while building WordPress feed from RSS Feed: {ex.Message}");
             }
 
-            await Task.Delay(TimeSpan.FromHours(12), stoppingToken);
+            await Task.Delay(TimeSpan.FromHours(Configuration.FetchInterval), stoppingToken);
         }
     }
 }

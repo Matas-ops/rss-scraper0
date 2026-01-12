@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using BnsNewsRss.Constants;
 using Microsoft.Extensions.Caching.Memory;
 using BnsNewsRss.Models;
 using BnsNewsRss.Keys;
@@ -32,7 +33,7 @@ public class RssAggregatorService
             return cached;
 
         var xml = await BuildWordPressFeedAsync(topicName);
-        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(12));
+        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(Configuration.FetchInterval));
         
         return xml;
     }
