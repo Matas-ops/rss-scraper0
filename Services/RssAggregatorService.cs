@@ -246,7 +246,7 @@ public class RssAggregatorService
         {
             sb.AppendLine("<item>");
             sb.AppendLine($"<title><![CDATA[{item.Title}]]></title>");
-            sb.AppendLine($"<link>{item.Link}</link>");
+            //sb.AppendLine($"<link>{item.Link}</link>");
             sb.AppendLine($"<guid isPermaLink=\"false\">{item.Guid}</guid>");
             sb.AppendLine($"<pubDate>{item.PubDate:R}</pubDate>");
             foreach (var category in item.MappedCategories)
