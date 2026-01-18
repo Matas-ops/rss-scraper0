@@ -33,7 +33,7 @@ public class RssAggregatorService
             return cached;
 
         var xml = await BuildWordPressFeedAsync(topicName);
-        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(Configuration.FetchInterval));
+        _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(Configuration.FetchIntervalHours));
         
         return xml;
     }
@@ -170,8 +170,7 @@ public class RssAggregatorService
                 Guid: guid,
                 BnsCategory: topic.Title,
                 MappedCategories: CategoryMapper.MapBnsTopicToCategory(topic.Title),
-                Content: "",
-                FeaturedImage: null
+                Content: ""
             ));
         }
     
@@ -244,6 +243,12 @@ public class RssAggregatorService
 
         foreach (var item in items.Where(i => i.MappedCategories.Contains(topicName)))
         {
+            //fallback image
+            if (string.IsNullOrEmpty(item.FeaturedImage) || item.FeaturedImage.Contains("sc.bns.lt/img/logo.png"))
+            {
+                item.FeaturedImage = $"{Configuration.HostUrl}/images/{Random.Shared.Next(1, 6)}.jpg";
+            }
+            
             sb.AppendLine("<item>");
             sb.AppendLine($"<title><![CDATA[{item.Title}]]></title>");
             //sb.AppendLine($"<link>{item.Link}</link>");

@@ -4,6 +4,7 @@ using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
 using BnsNewsRss.Services;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.FileProviders;
 
 namespace BnsNewsRss;
 
@@ -43,6 +44,12 @@ public class Program
                 return Results.Text(xml, "application/rss+xml", System.Text.Encoding.UTF8);
             });
         }
+        
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "data")),
+            RequestPath = "/images"
+        });
 
         app.Run();
     }

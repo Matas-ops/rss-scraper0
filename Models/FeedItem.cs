@@ -8,6 +8,8 @@ public record FeedItem(
     string Guid,
     string BnsCategory,
     List<string> MappedCategories,
-    string Content,
-    string? FeaturedImage
-);
+    string Content
+)
+{
+    public string? FeaturedImage { get; set; } 
+}
