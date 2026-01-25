@@ -16,7 +16,7 @@ public class RssAggregatorService
     private readonly IHttpClientFactory _http;
     private readonly IMemoryCache _cache;
     private readonly ArticleScraperService _scraper;
-
+    private readonly TimeSpan _mainFeedCacheDuration = TimeSpan.FromDays(7);
     private const string MainFeed = "https://sc.bns.lt/rss";
     private const int MaxItems = 40;
 
@@ -179,7 +179,14 @@ public class RssAggregatorService
 
     private async Task<List<Topic>> ReadTopicsAsync()
     {
-        var xml = SanitizeXml(await DownloadXmlAsync(MainFeed));
+        string xml;
+
+        if (!_cache.TryGetValue($"{CacheKeys.WordPressFeed}_{nameof(MainFeed)}", out xml))
+        {
+            xml = SanitizeXml(await DownloadXmlAsync(MainFeed));
+            _cache.Set($"{CacheKeys.WordPressFeed}_{nameof(MainFeed)}", xml, _mainFeedCacheDuration);
+        }
+        
         var doc = LoadXmlSafe(xml);
 
         return doc.Descendants("item")
