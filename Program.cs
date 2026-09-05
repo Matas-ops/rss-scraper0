@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using BnsNewsRss.Keys;
 using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
@@ -20,12 +21,17 @@ public class Program
         builder.Services.AddSingleton<RssAggregatorService>();
         builder.Services.AddSingleton<RssHealthState>();
         builder.Services.AddHostedService<RssBackgroundService>();
+        builder.Services.AddHttpClient<FacebookPageService>();
 
         var app = builder.Build();
 
         app.MapGet("/health", (IMemoryCache cache, RssHealthState state) =>
         {
-            var cached = cache.TryGetValue($"{CacheKeys.WordPressFeed}_Aktualijos", out _);
+            var cached = cache.TryGetValue(
+                $"{CacheKeys.WordPressFeed}_Aktualijos",
+                out _
+            );
+
             return Results.Json(new
             {
                 status = HttpStatusCode.OK,
@@ -40,11 +46,39 @@ public class Program
             app.MapGet($"/{category.ToLower()}", async (RssAggregatorService rss) =>
             {
                 var xml = await rss.GetCachedWordPressFeedAsync(category);
-                
-                return Results.Text(xml, "application/rss+xml", System.Text.Encoding.UTF8);
+
+                return Results.Text(
+                    xml,
+                    "application/rss+xml",
+                    Encoding.UTF8
+                );
             });
+
+            app.MapGet(
+                $"/temp/{category.ToLower()}",
+                async (RssAggregatorService rss) =>
+                {
+                    var dict =
+                        await rss.GetCachedBuildScrapedDictionaryForTopicAsync(
+                            category
+                        );
+
+                    var serializable = dict.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value
+                            .Select(t => new
+                            {
+                                FeedItem = t.Item1,
+                                ScrapedArticle = t.Item2
+                            })
+                            .ToList()
+                    );
+
+                    return Results.Json(serializable);
+                }
+            );
         }
-        
+
         app.UseStaticFiles(new StaticFileOptions
         {
             FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "data")),

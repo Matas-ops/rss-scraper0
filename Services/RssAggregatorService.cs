@@ -4,21 +4,21 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using BnsNewsRss.Constants;
-using Microsoft.Extensions.Caching.Memory;
-using BnsNewsRss.Models;
 using BnsNewsRss.Keys;
 using BnsNewsRss.Mappers;
+using BnsNewsRss.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace BnsNewsRss.Services;
 
 public class RssAggregatorService
 {
-    private readonly IHttpClientFactory _http;
-    private readonly IMemoryCache _cache;
-    private readonly ArticleScraperService _scraper;
-    private readonly TimeSpan _mainFeedCacheDuration = TimeSpan.FromDays(7);
     private const string MainFeed = "https://sc.bns.lt/rss";
     private const int MaxItems = 40;
+    private readonly IMemoryCache _cache;
+    private readonly IHttpClientFactory _http;
+    private readonly TimeSpan _mainFeedCacheDuration = TimeSpan.FromDays(7);
+    private readonly ArticleScraperService _scraper;
 
     public RssAggregatorService(IHttpClientFactory http, IMemoryCache cache, ArticleScraperService scraper)
     {
@@ -30,123 +30,199 @@ public class RssAggregatorService
     public async Task<string> GetCachedWordPressFeedAsync(string topicName)
     {
         if (_cache.TryGetValue($"{CacheKeys.WordPressFeed}_{topicName}", out string cached))
+        {
             return cached;
+        }
 
         var xml = await BuildWordPressFeedAsync(topicName);
         _cache.Set($"{CacheKeys.WordPressFeed}_{topicName}", xml, TimeSpan.FromHours(Configuration.FetchIntervalHours));
-        
+
         return xml;
     }
-    
+
     public async Task<string> BuildWordPressFeedAsync(string topicName)
     {
+        var tuples = await BuildScrapedItemsForTopicAsync(topicName);
+
+        var items = tuples
+            .Select(t =>
+            {
+                var fi = t.Item1;
+                var sa = t.Item2;
+                fi.Content = sa.Content;
+                fi.FeaturedImage = sa.FeaturedImage ?? GetFeaturedImageFromDescription(fi.Description);
+                EnsureFallbackImage(fi);
+                return fi;
+            })
+            .OrderByDescending(i => i.PubDate)
+            .ToList();
+
+        return BuildWordPressXml(items, topicName);
+    }
+
+    private async Task<List<Tuple<FeedItem, ScrapedArticle>>> BuildScrapedItemsForTopicAsync(string topicName)
+    {
         var topics = await ReadTopicsAsync();
-        var allItems = new List<FeedItem>();
-    
+        var filtered = FilterTopics(topics);
+        var allMeta = await GatherAllMetaItemsAsync(filtered);
+        var selected = SelectTopItems(allMeta, MaxItems);
+
+        var scrapedTuples = new List<Tuple<FeedItem, ScrapedArticle>>();
+        foreach (var item in selected)
+        {
+            try
+            {
+                var scraped = await _scraper.ScrapeArticleAsync(item.Link, item.Guid);
+                if (scraped.Content?.Contains("<p>") ?? false)
+                {
+                    var updated = item with
+                    {
+                        Content = scraped.Content,
+                        FeaturedImage = scraped.FeaturedImage ?? GetFeaturedImageFromDescription(item.Description)
+                    };
+                    EnsureFallbackImage(updated);
+                    scrapedTuples.Add(new Tuple<FeedItem, ScrapedArticle>(updated, scraped));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error scraping {item.Link}: {ex.Message}");
+            }
+        }
+
+        return scrapedTuples.Where(t => t.Item1.MappedCategories.Contains(topicName)).ToList();
+    }
+
+    public async Task<Dictionary<string, List<Tuple<FeedItem, ScrapedArticle>>>> BuildScrapedDictionaryForTopicAsync(
+        string topicName)
+    {
+        var list = await BuildScrapedItemsForTopicAsync(topicName);
+        var dict = new Dictionary<string, List<Tuple<FeedItem, ScrapedArticle>>> { [topicName] = list };
+
+        return dict;
+    }
+
+    public async Task<Dictionary<string, List<Tuple<FeedItem, ScrapedArticle>>>>
+        GetCachedBuildScrapedDictionaryForTopicAsync(
+            string topicName)
+    {
+        var cacheKey = $"{CacheKeys.ScrapedArticlesFeed}_{topicName}";
+
+        if (_cache.TryGetValue(cacheKey, out Dictionary<string, List<Tuple<FeedItem, ScrapedArticle>>> cached))
+        {
+            return cached;
+        }
+
+        var list = await BuildScrapedItemsForTopicAsync(topicName);
+        var dict = new Dictionary<string, List<Tuple<FeedItem, ScrapedArticle>>> { [topicName] = list };
+
+        _cache.Set(cacheKey, dict, TimeSpan.FromHours(Configuration.FetchIntervalHours));
+
+        return dict;
+    }
+
+    // Helpers
+    private IEnumerable<Topic> FilterTopics(IEnumerable<Topic> topics)
+    {
+        var excluded = new[]
+        {
+            "Visi pranešimai", "RAIT apklausos", "Teisinė sistema",
+            "Nacionalinis saugumas", "Spaudos konferencijos",
+            "Viešoji komunikacija", "Jaunimas"
+        };
+
+        return topics.Where(t => !excluded.Any(e => t.Title.Contains(e, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private async Task<List<FeedItem>> GatherAllMetaItemsAsync(IEnumerable<Topic> topics)
+    {
+        var list = new List<FeedItem>();
         foreach (var topic in topics)
         {
             try
             {
-                //don't read these topics
-                if (topic.Title.Contains("Visi pranešimai") || topic.Title.Contains("RAIT apklausos") || topic.Title.Contains("Teisinė sistema") || topic.Title.Contains("Nacionalinis saugumas") || topic.Title.Contains("Spaudos konferencijos") || topic.Title.Contains("Viešoji komunikacija") || topic.Title.Contains("Jaunimas"))
-                {
-                    continue;
-                }
-                
-                var items = await ReadTopicItemsMetaAsync(topic); // Only metadata, no scraping
-                allItems.AddRange(items);
+                var items = await ReadTopicItemsMetaAsync(topic);
+                list.AddRange(items);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.Error.WriteLine(ex.Message);
             }
         }
-        
-        //clusterfuck
-        //TODO optimize by custom category selection priority list if this will be needed
-        
-        var deduped = allItems
+
+        return list;
+    }
+
+    private static List<FeedItem> SelectTopItems(List<FeedItem> items, int max)
+    {
+        var deduped = items
             .GroupBy(i => i.Guid)
             .Select(g => g.First())
             .OrderByDescending(i => i.PubDate)
-            .Take(MaxItems)
             .ToList();
 
-         var groupedByCategory = deduped
-             .GroupBy(i => i.BnsCategory)
-             .Select(g => g
-                 .OrderByDescending(i => i.PubDate)
-                 .ToList())
-             .ToList();
+        var groupedByCategory = deduped
+            .GroupBy(i => i.BnsCategory)
+            .Select(g => g.OrderByDescending(i => i.PubDate).ToList())
+            .ToList();
 
         var finalItems = new List<FeedItem>();
-         int index = 0;
-        
-         while (finalItems.Count < MaxItems)
-         {
-             bool addedAny = false;
-        
-             foreach (var categoryItems in groupedByCategory)
-             {
-                 if (index < categoryItems.Count)
-                 {
-                     finalItems.Add(categoryItems[index]);
-                     addedAny = true;
-        
-                     if (finalItems.Count == MaxItems)
-                         break;
-                 }
-             }
-        
-             if (!addedAny)
-                 break; // no more items in any category
-        
-             index++;
-         }
-    
-        // Now scrape only the selected items
-        var scrapedItems = new List<FeedItem>();
-        foreach (var item in finalItems)
+        var index = 0;
+        while (finalItems.Count < max)
         {
-            var scraped = await _scraper.ScrapeArticleAsync(item.Link, item.Guid);
-
-            if (scraped.Content?.Contains("<p>") ?? false)
+            var addedAny = false;
+            foreach (var categoryItems in groupedByCategory)
             {
-                scrapedItems.Add(item with
+                if (index < categoryItems.Count)
                 {
-                    Content = scraped.Content,
-                    FeaturedImage = scraped.FeaturedImage ?? GetFeaturedImageFromDescription(item.Description)
-                });
+                    finalItems.Add(categoryItems[index]);
+                    addedAny = true;
+                    if (finalItems.Count == max)
+                    {
+                        break;
+                    }
+                }
             }
+
+            if (!addedAny)
+            {
+                break;
+            }
+
+            index++;
         }
-        
-        scrapedItems.Sort( (a, b) => b.PubDate.CompareTo(a.PubDate) );
-    
-        return BuildWordPressXml(scrapedItems, topicName);
+
+        return finalItems;
     }
-    
+
+    private void EnsureFallbackImage(FeedItem item)
+    {
+        if (string.IsNullOrEmpty(item.FeaturedImage) || item.FeaturedImage.Contains("sc.bns.lt/img/logo.png"))
+        {
+            item.FeaturedImage = $"{Configuration.HostUrl}/images/{Random.Shared.Next(1, 6)}.jpg";
+        }
+    }
+
     /*
-     * <![CDATA[ <img src="https://sc.bns.lt/docs/1/521559/original_Vilmaimaitien.jpg" alt="" />Metų pabaiga daugeliui iš mūsų atneša ne tik šventinę nuotaiką, bet ir nuovargį, įtampą, vidinį spaudimą „dar spėti“, „užbaigti“, „padaryti geriau“. Taip pat Naujųjų metų pradžia kviečia atsinaujinti – atsisakyti žalingų įpročių, susidaryti sąrašą da... ]]>
+     * <![CDATA[ <img src="https://sc.bns.lt/docs/1/521559/original_Vilmaimaitien.jpg" alt="" />... ]]>
      */
-    
     private string GetFeaturedImageFromDescription(string description)
     {
         if (string.IsNullOrWhiteSpace(description))
+        {
             return null;
-        
+        }
+
         var match = Regex.Match(description, @"<img\s+src=""([^""]+)""");
-        
         return match.Success ? match.Groups[1].Value : null;
     }
-    
-    // New method: only reads metadata, no scraping
+
     private async Task<List<FeedItem>> ReadTopicItemsMetaAsync(Topic topic)
     {
         var xml = SanitizeXml(await DownloadXmlAsync(topic.Url));
         var doc = LoadXmlSafe(xml);
-    
+
         var items = new List<FeedItem>();
-    
         foreach (var i in doc.Descendants("item"))
         {
             DateTime.TryParseExact(
@@ -156,37 +232,35 @@ public class RssAggregatorService
                 DateTimeStyles.None,
                 out var pubDate
             );
-    
+
             var guid = i.Element("guid")?.Value ?? Guid.NewGuid().ToString();
             var title = i.Element("title")?.Value ?? "";
             var link = i.Element("link")?.Value.Trim() ?? "";
             var description = i.Element("description")?.Value ?? "";
-    
+
             items.Add(new FeedItem(
-                Title: title.Trim(),
-                Link: link,
-                Description: description.Trim(),
-                PubDate: pubDate == default ? DateTime.UtcNow : pubDate,
-                Guid: guid,
-                BnsCategory: topic.Title,
-                MappedCategories: CategoryMapper.MapBnsTopicToCategory(topic.Title),
-                Content: ""
+                title.Trim(),
+                link,
+                description.Trim(),
+                pubDate == default ? DateTime.UtcNow : pubDate,
+                guid,
+                topic.Title,
+                CategoryMapper.MapBnsTopicToCategory(topic.Title)
             ));
         }
-    
+
         return items;
     }
 
     private async Task<List<Topic>> ReadTopicsAsync()
     {
         string xml;
-
         if (!_cache.TryGetValue($"{CacheKeys.WordPressFeed}_{nameof(MainFeed)}", out xml))
         {
             xml = SanitizeXml(await DownloadXmlAsync(MainFeed));
             _cache.Set($"{CacheKeys.WordPressFeed}_{nameof(MainFeed)}", xml, _mainFeedCacheDuration);
         }
-        
+
         var doc = LoadXmlSafe(xml);
 
         return doc.Descendants("item")
@@ -197,7 +271,7 @@ public class RssAggregatorService
             .Where(t => !string.IsNullOrEmpty(t.Url) && t.Url.EndsWith("/rss", StringComparison.OrdinalIgnoreCase))
             .ToList();
     }
-    
+
     private static XDocument LoadXmlSafe(string xml)
     {
         var settings = new XmlReaderSettings
@@ -210,14 +284,16 @@ public class RssAggregatorService
 
         using var sr = new StringReader(xml);
         using var reader = XmlReader.Create(sr, settings);
-
         return XDocument.Load(reader, LoadOptions.PreserveWhitespace);
     }
 
     private static string SanitizeXml(string xml)
     {
-        if (string.IsNullOrWhiteSpace(xml)) return "";
-        
+        if (string.IsNullOrWhiteSpace(xml))
+        {
+            return "";
+        }
+
         return xml.Replace("&nbsp;", " ").Replace("&laquo;", "«").Replace("&raquo;", "»");
     }
 
@@ -225,7 +301,6 @@ public class RssAggregatorService
     {
         var client = _http.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(15);
-        
         return await client.GetStringAsync(url);
     }
 
@@ -250,31 +325,28 @@ public class RssAggregatorService
 
         foreach (var item in items.Where(i => i.MappedCategories.Contains(topicName)))
         {
-            //fallback image
-            if (string.IsNullOrEmpty(item.FeaturedImage) || item.FeaturedImage.Contains("sc.bns.lt/img/logo.png"))
-            {
-                item.FeaturedImage = $"{Configuration.HostUrl}/images/{Random.Shared.Next(1, 6)}.jpg";
-            }
-            
             sb.AppendLine("<item>");
             sb.AppendLine($"<title><![CDATA[{item.Title}]]></title>");
-            //sb.AppendLine($"<link>{item.Link}</link>");
             sb.AppendLine($"<guid isPermaLink=\"false\">{item.Guid}</guid>");
             sb.AppendLine($"<pubDate>{item.PubDate:R}</pubDate>");
             foreach (var category in item.MappedCategories)
             {
                 sb.AppendLine($"<category><![CDATA[{category}]]></category>");
             }
-            //sb.AppendLine($"<category><![CDATA[{item.Category}]]></category>");
+
             sb.AppendLine($"<description><![CDATA[{item.Description}]]></description>");
             sb.AppendLine($"<content:encoded><![CDATA[{item.Content}]]></content:encoded>");
             if (!string.IsNullOrEmpty(item.FeaturedImage) && !item.FeaturedImage.Contains("sc.bns.lt/img/logo.png"))
             {
-                string type = item.FeaturedImage.Split(".")[^1].ToLower();
-                if (type == "jpg") type = "jpeg";
-                
+                var type = item.FeaturedImage.Split(".")[^1].ToLower();
+                if (type == "jpg")
+                {
+                    type = "jpeg";
+                }
+
                 sb.AppendLine($@"<enclosure url=""{item.FeaturedImage}"" length=""0"" medium=""image/{type}"" />");
             }
+
             sb.AppendLine("</item>");
         }
 

@@ -1,10 +1,8 @@
 using BnsNewsRss.Constants;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Caching.Memory;
 using BnsNewsRss.Keys;
 using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
-using BnsNewsRss.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace BnsNewsRss.Services;
 
@@ -30,13 +28,17 @@ public class RssBackgroundService : BackgroundService
                 foreach (var category in CategoryMapper.AllCategories)
                 {
                     var xml = await _aggregator.BuildWordPressFeedAsync(category);
-                    
-                    _cache.Set($"{CacheKeys.WordPressFeed}_{category}", xml, TimeSpan.FromHours(Configuration.FetchIntervalHours));
+                    _cache.Set($"{CacheKeys.WordPressFeed}_{category}", xml,
+                        TimeSpan.FromHours(Configuration.FetchIntervalHours));
+
+                    var dict = await _aggregator.BuildScrapedDictionaryForTopicAsync(category);
+                    _cache.Set($"{CacheKeys.ScrapedArticlesFeed}_{category}", dict,
+                        TimeSpan.FromHours(Configuration.FetchIntervalHours));
                 }
-                
+
                 _state.LastRefreshUtc = DateTime.UtcNow;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Console.Error.WriteLine($"Error while building WordPress feed from RSS Feed: {ex.Message}");
             }
