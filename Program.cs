@@ -4,6 +4,7 @@ using BnsNewsRss.Keys;
 using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
 using BnsNewsRss.Services;
+using DotNetEnv;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.FileProviders;
 
@@ -15,6 +16,14 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        var envFile = Path.Combine(builder.Environment.ContentRootPath, ".env");
+        if (File.Exists(envFile))
+        {
+            Env.Load(envFile);
+        }
+
+        builder.Configuration.AddEnvironmentVariables();
+
         builder.Services.AddHttpClient();
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ArticleScraperService>();
@@ -22,15 +31,13 @@ public class Program
         builder.Services.AddSingleton<RssHealthState>();
         builder.Services.AddHostedService<RssBackgroundService>();
         builder.Services.AddHttpClient<FacebookPageService>();
+        builder.Services.AddHostedService<FacebookAutoPosterService>();
 
         var app = builder.Build();
 
         app.MapGet("/health", (IMemoryCache cache, RssHealthState state) =>
         {
-            var cached = cache.TryGetValue(
-                $"{CacheKeys.WordPressFeed}_Aktualijos",
-                out _
-            );
+            var cached = cache.TryGetValue($"{CacheKeys.WordPressFeed}_Aktualijos", out _);
 
             return Results.Json(new
             {
@@ -46,37 +53,8 @@ public class Program
             app.MapGet($"/{category.ToLower()}", async (RssAggregatorService rss) =>
             {
                 var xml = await rss.GetCachedWordPressFeedAsync(category);
-
-                return Results.Text(
-                    xml,
-                    "application/rss+xml",
-                    Encoding.UTF8
-                );
+                return Results.Text(xml, "application/rss+xml", Encoding.UTF8);
             });
-
-            app.MapGet(
-                $"/temp/{category.ToLower()}",
-                async (RssAggregatorService rss) =>
-                {
-                    var dict =
-                        await rss.GetCachedBuildScrapedDictionaryForTopicAsync(
-                            category
-                        );
-
-                    var serializable = dict.ToDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value
-                            .Select(t => new
-                            {
-                                FeedItem = t.Item1,
-                                ScrapedArticle = t.Item2
-                            })
-                            .ToList()
-                    );
-
-                    return Results.Json(serializable);
-                }
-            );
         }
 
         app.UseStaticFiles(new StaticFileOptions

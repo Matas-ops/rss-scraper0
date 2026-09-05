@@ -9,4 +9,9 @@ public static class CacheKeys
     {
         return $"article::{guid}";
     }
+
+    public static string FacebookPosted(string guid)
+    {
+        return $"facebook_posted::{guid}";
+    }
 }

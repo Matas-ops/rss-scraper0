@@ -3,6 +3,8 @@ using System.Text.Json;
 using BnsNewsRss.Exceptions;
 using BnsNewsRss.Models;
 
+namespace BnsNewsRss.Services;
+
 public class FacebookPageService
 {
     private readonly HttpClient _httpClient;
@@ -16,27 +18,32 @@ public class FacebookPageService
         string pageId,
         string pageAccessToken,
         string message,
+        string? imageUrl = null,
         CancellationToken cancellationToken = default)
     {
-        var url = $"https://graph.facebook.com/v26.0/{pageId}/feed";
+        var endpoint = string.IsNullOrWhiteSpace(imageUrl)
+            ? $"https://graph.facebook.com/v26.0/{pageId}/feed"
+            : $"https://graph.facebook.com/v26.0/{pageId}/photos";
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
 
         request.Headers.Authorization =
             new AuthenticationHeaderValue("Bearer", pageAccessToken);
 
-        request.Content = new FormUrlEncodedContent(
-            new Dictionary<string, string>
-            {
-                ["message"] = message
-            });
+        var payload = new Dictionary<string, string>
+        {
+            ["message"] = message
+        };
 
-        using var response = await _httpClient.SendAsync(
-            request,
-            cancellationToken);
+        if (!string.IsNullOrWhiteSpace(imageUrl))
+        {
+            payload["url"] = imageUrl;
+        }
 
-        var responseBody = await response.Content.ReadAsStringAsync(
-            cancellationToken);
+        request.Content = new FormUrlEncodedContent(payload);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
