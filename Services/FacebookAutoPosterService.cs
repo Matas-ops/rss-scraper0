@@ -1,6 +1,9 @@
+using System.Net;
+using System.Text.RegularExpressions;
 using BnsNewsRss.Keys;
 using BnsNewsRss.Mappers;
 using BnsNewsRss.Models;
+using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BnsNewsRss.Services;
@@ -77,13 +80,13 @@ public class FacebookAutoPosterService : BackgroundService
 
         var selected = candidates[Random.Shared.Next(candidates.Count)];
         var scraped = await _scraper.ScrapeArticleAsync(selected.Link, selected.Guid);
-        var message = $"{selected.Title}\n\n{scraped.Content}";
+        var message = $"{selected.Title}\n\n{SanitizeHtmlText(scraped.Content)}";
 
         var result = await _facebookPageService.CreatePostAsync(
             _pageId,
             _pageAccessToken,
             message,
-            scraped.FeaturedImage,
+            selected.FeaturedImage,
             cancellationToken);
 
         _cache.Set(
@@ -92,6 +95,35 @@ public class FacebookAutoPosterService : BackgroundService
             TimeSpan.FromDays(30));
 
         return result;
+    }
+
+    private static string SanitizeHtmlText(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = html.Trim();
+        cleaned = Regex.Replace(cleaned, @"^\s*<!\[CDATA\[", "", RegexOptions.IgnoreCase);
+        cleaned = Regex.Replace(cleaned, @"\]\]>\s*$", "", RegexOptions.IgnoreCase);
+
+        var doc = new HtmlDocument();
+        doc.LoadHtml(cleaned);
+
+        foreach (var node in doc.DocumentNode.SelectNodes("//script|//style"))
+        {
+            node.Remove();
+        }
+
+        var text = WebUtility.HtmlDecode(doc.DocumentNode.InnerText);
+
+        text = Regex.Replace(text, @"\r\n?|\n", "\n");
+        text = Regex.Replace(text, @"[ \t]*\n[ \t]*", "\n");
+        text = Regex.Replace(text, @"[ \t]{2,}", " ");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
+
+        return text.Trim();
     }
 
     private async Task<List<FeedItem>> GetEligibleCandidatesAsync()
