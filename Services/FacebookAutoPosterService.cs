@@ -16,17 +16,20 @@ public class FacebookAutoPosterService : BackgroundService
     private readonly string? _pageId;
     private readonly TimeSpan _postCooldown = TimeSpan.FromDays(30);
     private readonly RssAggregatorService _rssAggregator;
+    private readonly ArticleScraperService _scraper;
 
     public FacebookAutoPosterService(
         IMemoryCache cache,
         RssAggregatorService rssAggregator,
         FacebookPageService facebookPageService,
+        ArticleScraperService scraper,
         IConfiguration config,
         ILogger<FacebookAutoPosterService> logger)
     {
         _cache = cache;
         _rssAggregator = rssAggregator;
         _facebookPageService = facebookPageService;
+        _scraper = scraper;
         _logger = logger;
 
         _pageId = config["FACEBOOK_PAGE_ID"] ?? config["facebook:pageId"];
@@ -73,14 +76,14 @@ public class FacebookAutoPosterService : BackgroundService
         }
 
         var selected = candidates[Random.Shared.Next(candidates.Count)];
-
-        var message = $"{selected.Title}\n\n{selected.Link}";
+        var scraped = await _scraper.ScrapeArticleAsync(selected.Link, selected.Guid);
+        var message = $"{selected.Title}\n\n{scraped.Content}";
 
         var result = await _facebookPageService.CreatePostAsync(
             _pageId,
             _pageAccessToken,
             message,
-            selected.FeaturedImage,
+            scraped.FeaturedImage,
             cancellationToken);
 
         _cache.Set(
