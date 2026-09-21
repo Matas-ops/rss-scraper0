@@ -12,7 +12,7 @@ public class FacebookAutoPosterService : BackgroundService
 {
     private readonly IMemoryCache _cache;
 
-    private readonly TimeSpan _checkInterval = TimeSpan.FromHours(12);
+    private readonly TimeSpan _checkInterval = TimeSpan.FromHours(4);
     private readonly FacebookPageService _facebookPageService;
     private readonly ILogger<FacebookAutoPosterService> _logger;
     private readonly string? _pageAccessToken;
