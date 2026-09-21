@@ -111,7 +111,7 @@ public class FacebookAutoPosterService : BackgroundService
         var doc = new HtmlDocument();
         doc.LoadHtml(cleaned);
 
-        foreach (var node in doc.DocumentNode.SelectNodes("//script|//style"))
+        foreach (var node in doc.DocumentNode.SelectNodes("//script|//style") ?? Enumerable.Empty<HtmlNode>())
         {
             node.Remove();
         }
