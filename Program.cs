@@ -24,13 +24,15 @@ public class Program
 
         builder.Configuration.AddEnvironmentVariables();
 
-        builder.Services.AddHttpClient();
+        builder.Services.AddHttpClient("ArticleScraper", client => { client.Timeout = TimeSpan.FromSeconds(60); });
+
+        builder.Services.AddHttpClient<FacebookPageService>(client => { client.Timeout = TimeSpan.FromSeconds(60); });
+
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ArticleScraperService>();
         builder.Services.AddSingleton<RssAggregatorService>();
         builder.Services.AddSingleton<RssHealthState>();
         builder.Services.AddHostedService<RssBackgroundService>();
-        builder.Services.AddHttpClient<FacebookPageService>();
         builder.Services.AddHostedService<FacebookAutoPosterService>();
 
         var app = builder.Build();

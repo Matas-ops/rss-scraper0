@@ -64,7 +64,7 @@ public class FacebookAutoPosterService : BackgroundService
         }
     }
 
-    public async Task<FacebookPostResult?> PublishRandomAvailableArticleAsync(
+    private async Task<FacebookPostResult?> PublishRandomAvailableArticleAsync(
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_pageId) || string.IsNullOrWhiteSpace(_pageAccessToken))
@@ -79,7 +79,12 @@ public class FacebookAutoPosterService : BackgroundService
         }
 
         var selected = candidates[Random.Shared.Next(candidates.Count)];
-        var scraped = await _scraper.ScrapeArticleAsync(selected.Link, selected.Guid);
+
+        var scraped = await _scraper.ScrapeArticleAsync(
+            selected.Link,
+            selected.Guid,
+            cancellationToken);
+
         var message = $"{selected.Title}\n\n{SanitizeHtmlText(scraped.Content)}";
 
         var result = await _facebookPageService.CreatePostAsync(

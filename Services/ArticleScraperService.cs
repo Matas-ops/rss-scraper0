@@ -1,21 +1,20 @@
 using System.Net;
 using System.Net.Http.Headers;
-using HtmlAgilityPack;
-using Microsoft.Extensions.Caching.Memory;
-using BnsNewsRss.Keys;
-using BnsNewsRss.Models;
 using System.Text;
 using System.Text.RegularExpressions;
+using BnsNewsRss.Keys;
+using BnsNewsRss.Models;
+using HtmlAgilityPack;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace BnsNewsRss.Services;
 
 public class ArticleScraperService
 {
-    private readonly IHttpClientFactory _http;
-    private readonly IMemoryCache _cache;
-
     private static readonly SemaphoreSlim _semaphore = new(2);
     private static DateTime _lastRequest = DateTime.MinValue;
+    private readonly IMemoryCache _cache;
+    private readonly IHttpClientFactory _http;
 
     public ArticleScraperService(IHttpClientFactory http, IMemoryCache cache)
     {
@@ -23,27 +22,34 @@ public class ArticleScraperService
         _cache = cache;
     }
 
-    public async Task<ScrapedArticle> ScrapeArticleAsync(string url, string guid)
+    public async Task<ScrapedArticle> ScrapeArticleAsync(
+        string url,
+        string guid,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(url))
+        {
             return new ScrapedArticle("", null);
+        }
 
-        // Return cached article if exists
         if (_cache.TryGetValue(CacheKeys.Article(guid), out ScrapedArticle cached))
+        {
             return cached;
+        }
 
-        // Rate limit 2 requests/sec
-        await _semaphore.WaitAsync();
+        await _semaphore.WaitAsync(cancellationToken);
         try
         {
             var diff = DateTime.UtcNow - _lastRequest;
             if (diff.TotalMilliseconds < 500)
-                await Task.Delay(500 - (int)diff.TotalMilliseconds);
+            {
+                await Task.Delay(500 - (int)diff.TotalMilliseconds, cancellationToken);
+            }
 
-            //sorry
-            var client = _http.CreateClient();
+            var client = _http.CreateClient("ArticleScraper");
             client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("abc", "1.0"));
-            var html = await client.GetStringAsync(url);
+
+            var html = await client.GetStringAsync(url, cancellationToken);
 
             _lastRequest = DateTime.UtcNow;
 
@@ -66,7 +72,9 @@ public class ArticleScraperService
     private static string ParseArticleContent(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
+        {
             return "";
+        }
 
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
@@ -77,7 +85,9 @@ public class ArticleScraperService
             .SelectSingleNode("//div[contains(@class,'sc-item-body')]");
 
         if (bodyNode == null)
+        {
             return "";
+        }
 
         // IMPORTANT: only direct children, not Descendants()
         foreach (var node in bodyNode.ChildNodes.Where(n => n.NodeType == HtmlNodeType.Element))
@@ -87,7 +97,10 @@ public class ArticleScraperService
                 case "p":
                     var text = CleanInner(node);
                     if (!string.IsNullOrWhiteSpace(text))
+                    {
                         sb.AppendLine($"<p>{text}</p>");
+                    }
+
                     break;
 
                 case "h1":
@@ -103,7 +116,7 @@ public class ArticleScraperService
                 case "figure":
                     AppendFigure(node, sb);
                     break;
-                
+
                 case "ul":
                 case "ol":
                     AppendList(node, sb);
@@ -119,14 +132,16 @@ public class ArticleScraperService
         var sb = new StringBuilder();
 
         foreach (var child in node.ChildNodes)
+        {
             AppendInlineNode(child, sb);
+        }
 
         var html = WebUtility.HtmlDecode(sb.ToString());
         html = Regex.Replace(html, @"\s+", " ").Trim();
 
         return html;
     }
-    
+
     private static void AppendInlineNode(HtmlNode node, StringBuilder sb)
     {
         switch (node.NodeType)
@@ -141,7 +156,10 @@ public class ArticleScraperService
                     case "strong":
                         sb.Append("<strong>");
                         foreach (var c in node.ChildNodes)
+                        {
                             AppendInlineNode(c, sb);
+                        }
+
                         sb.Append("</strong>");
                         break;
 
@@ -149,7 +167,10 @@ public class ArticleScraperService
                     case "i":
                         sb.Append("<em>");
                         foreach (var c in node.ChildNodes)
+                        {
                             AppendInlineNode(c, sb);
+                        }
+
                         sb.Append("</em>");
                         break;
 
@@ -160,18 +181,24 @@ public class ArticleScraperService
                     default:
                         // unwrap span, p, etc. but keep content
                         foreach (var c in node.ChildNodes)
+                        {
                             AppendInlineNode(c, sb);
+                        }
+
                         break;
                 }
+
                 break;
         }
     }
-    
+
     private static void AppendLink(HtmlNode node, StringBuilder sb)
     {
         var href = node.GetAttributeValue("href", null);
         if (string.IsNullOrWhiteSpace(href))
+        {
             return;
+        }
 
         var isHttp =
             href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -182,7 +209,9 @@ public class ArticleScraperService
 
         // Allow only http(s) and mailto
         if (!isHttp && !isMailto)
+        {
             return;
+        }
 
         sb.Append("<a href=\"");
         sb.Append(WebUtility.HtmlEncode(href));
@@ -190,16 +219,20 @@ public class ArticleScraperService
 
         var target = node.GetAttributeValue("target", null);
         if (!string.IsNullOrWhiteSpace(target))
+        {
             sb.Append($" target=\"{target}\"");
+        }
 
         sb.Append(" rel=\"noopener noreferrer\">");
 
         foreach (var c in node.ChildNodes)
+        {
             AppendInlineNode(c, sb);
+        }
 
         sb.Append("</a>");
     }
-    
+
     private static void AppendList(HtmlNode listNode, StringBuilder sb)
     {
         var tag = listNode.Name; // ul or ol
@@ -210,11 +243,15 @@ public class ArticleScraperService
             var itemSb = new StringBuilder();
 
             foreach (var child in li.ChildNodes)
+            {
                 AppendInlineNode(child, itemSb);
+            }
 
             var text = WebUtility.HtmlDecode(itemSb.ToString()).Trim();
             if (!string.IsNullOrWhiteSpace(text))
+            {
                 sb.AppendLine($"<li>{text}</li>");
+            }
         }
 
         sb.AppendLine($"</{tag}>");
@@ -230,21 +267,25 @@ public class ArticleScraperService
             var src = img.GetAttributeValue("src", "");
             if (!string.IsNullOrWhiteSpace(src))
             {
-                sb.AppendLine($"<figure>");
+                sb.AppendLine("<figure>");
                 sb.AppendLine($"<img src=\"{src}\" alt=\"\" />");
 
                 if (caption != null)
+                {
                     sb.AppendLine($"<figcaption>{caption.InnerText.Trim()}</figcaption>");
+                }
 
-                sb.AppendLine($"</figure>");
+                sb.AppendLine("</figure>");
             }
         }
     }
-    
+
     private static string CleanHtmlForWordPress(string html)
     {
         if (string.IsNullOrWhiteSpace(html))
+        {
             return "";
+        }
 
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
@@ -260,15 +301,20 @@ public class ArticleScraperService
 
     private static string? ExtractFeaturedImage(string html)
     {
-        if (string.IsNullOrWhiteSpace(html)) return null;
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return null;
+        }
 
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
 
         var imgNode = doc.DocumentNode.SelectSingleNode("//figure[contains(@class,'sc-item-logo')]//img");
         if (imgNode != null && imgNode.Attributes["src"] != null)
+        {
             return imgNode.Attributes["src"].Value;
-        
+        }
+
         return null;
     }
 }
