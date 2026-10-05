@@ -21,4 +21,6 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 COPY data ./data
 
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "BnsNewsRss.dll"]
