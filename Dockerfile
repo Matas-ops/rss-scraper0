@@ -1,9 +1,9 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+﻿FROM cgr.dev/chainguard/aspnet-runtime:latest AS base
 WORKDIR /app
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM cgr.dev/chainguard/dotnet-sdk:latest AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["BnsNewsRss.csproj", "./"]
