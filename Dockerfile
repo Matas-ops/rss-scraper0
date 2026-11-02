@@ -5,6 +5,7 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 
 FROM cgr.dev/chainguard/dotnet-sdk:latest AS build
 ARG BUILD_CONFIGURATION=Release
+USER root
 WORKDIR /src/app
 COPY ["BnsNewsRss.csproj", "./"]
 RUN dotnet restore "BnsNewsRss.csproj"
