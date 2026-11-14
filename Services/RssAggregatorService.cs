@@ -253,7 +253,7 @@ public class RssAggregatorService
             //fallback image
             if (string.IsNullOrEmpty(item.FeaturedImage) || item.FeaturedImage.Contains("sc.bns.lt/img/logo.png"))
             {
-                item.FeaturedImage = $"{Configuration.HostUrl}/images/{Random.Shared.Next(1, 6)}.jpg";
+                item.FeaturedImage = $"{Configuration.HostUrl}/images/{Random.Shared.Next(1, 5)}.jpg";
             }
             
             sb.AppendLine("<item>");
